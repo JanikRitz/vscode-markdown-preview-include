@@ -1,10 +1,10 @@
 {
   "name": "vscode-markdown-preview-include",
-  "displayName": "Markdown Preview Include Files",
-  "description": "Support transclusion of files wihin Markdown Preview",
-  "version": "0.0.4",
+  "displayName": "Markdown Preview Include Files (Extended)",
+  "description": "Support transclusion of files within Markdown Preview, and allow for single or multi line excerpts",
+  "version": "0.0.5",
   "engines": {
-    "vscode": "^1.30.0"
+    "vscode": "^1.35.0"
   },
   "main": "index.js",
   "keywords": [
@@ -21,8 +21,8 @@
     "Other"
   ],
   "icon": "logo128.png",
-  "author": "Markus Stamminger",
-  "publisher": "stamminger",
+  "author": "Janik Ritz",
+  "publisher": "ritz",
   "license": "SEE LICENSE IN LICENSE.txt",
   "homepage": "https://github.com/SIPS1980/vscode-markdown-preview-include#readme",
   "repository": {
@@ -41,13 +41,13 @@
     "package": "vsce package",
     "package:list": "vsce ls"
   },
-  "dependencies": {},
   "devDependencies": {
     "@types/markdown-it": "0.0.7",
     "@types/node": "^12.0.7",
     "@types/vscode": "^1.35.0",
     "markdown-it": "^8.4.2",
     "typescript": "^3.5.1",
+    "vsce": "^2.15.0",
     "vscode": "^1.1.34"
   }
 }

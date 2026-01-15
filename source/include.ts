@@ -5,25 +5,32 @@ import MarkdownIt = require('markdown-it')
 import StateCore = require('markdown-it/lib/rules_core/state_core');
 import IncludeSettings from './includeSettings'
 
-// Default settings
 const DEFAULT_COMMONMARK_REGEX: boolean = true
 const DEFAULT_MARKDOWN_IT_REGEX: boolean = true
 const DEFAULT_NOT_FOUND_MESSAGE: string = 'File \'{{FILE}}\' not found'
 const DEFAULT_CIRCULAR_MESSAGE: string = 'Circular reference between \'{{FILE}}\' and \'{{PARENT}}\''
 
-// Default regex patterns
-const COMMONMARK_PATTERN: RegExp = /\:(?:\[([^|\]]*)\|?([^\]]*)\])?\(([^)]+)\)/i
-const MARKDOWN_IT_PATTERN: RegExp = /\!{3}\s*include\s*\(\s*(.+?)\s*\)\s*\!{3}/i
+// --- CHANGED: Regex patterns now allow for an optional #L... suffix ---
+const COMMONMARK_PATTERN: RegExp = /\:(?:\[([^|\]]*)\|?([^\]]*)\])?\(([^)#]+)(?:#L(\d+)(?:-(\d+))?)?\)/i
+const MARKDOWN_IT_PATTERN: RegExp = /\!{3}\s*include\s*\(\s*(.+?)(?:\s*#L(\d+)(?:-(\d+))?)?\s*\)\s*\!{3}/i
 
-/** Main entry point for markdown-it plugin */
 export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
 
-    // Ensure there is a settings object
-    if (settings === undefined) {
-        settings = { }
+    if (settings === undefined) { settings = { } }
+
+    /** Helper to extract specific lines from a string */
+    function sliceLines(content: string, startLine?: string, endLine?: string): string {
+        if (!startLine) return content;
+        
+        const lines = content.split(/\r?\n/);
+        const start = parseInt(startLine) - 1; // 1-indexed to 0-indexed
+        // If no endLine provided, just take the one single line. 
+        // If endLine is provided, take the range.
+        const end = endLine ? parseInt(endLine) : start + 1;
+        
+        return lines.slice(start, end).join('\n');
     }
 
-    /** Replace include mark in parent content with assemblied child content */
     function replace(
         regexResult: RegExpExecArray,
         parentContent: string,
@@ -32,46 +39,40 @@ export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
         childName: string,
         notFoundMessage: string,
         circulareMessage: string,
-        processedFiles: String[]): string {
+        processedFiles: String[],
+        startLine?: string, // NEW
+        endLine?: string    // NEW
+    ): string {
 
-        // Assembly path to child file
         const childFile: string = path.resolve(parentFolder, childName)
-
-        // Assembly child content
         let childContent: string
+
         if (fs.existsSync(childFile) === false) {
-            // Child file does not exist
             childContent = notFoundMessage.replace('{{FILE}}', childFile)
         } else if (processedFiles.indexOf(childFile) !== -1) {
-            // Child file would be a circular reference
             childContent = circulareMessage.replace('{{FILE}}', childFile).replace('{{PARENT}}', parentFile as string)
         } else {
-            // Get child file content and process it
             childContent = fs.readFileSync(childFile, 'utf8')
+            
+            // --- CHANGED: Apply the line slicing before processing nested includes ---
+            childContent = sliceLines(childContent, startLine, endLine);
+            
             childContent = execute(childContent, childFile, processedFiles);
         }
 
-        // Execute replace
         return parentContent.slice(0, regexResult.index)
             + childContent
             + parentContent.slice(regexResult.index + regexResult[0].length, parentContent.length);
     }
 
-    /** Execute including of child files (execute the transclusion) */
     function execute(parentContent: string, parentFile: string, processedFiles?: String[]): string {
-        // Prepare checking for circulare references
         processedFiles = processedFiles === undefined ? [] : processedFiles.slice()
-        if (parentFile !== undefined) {
-            processedFiles.push(parentFile)
-        }
+        if (parentFile !== undefined) { processedFiles.push(parentFile) }
 
-        // Get folder of parent file as reference for child files
         const parentFolder: string = path.dirname(parentFile)
-
-        // Replace include marks in parent file
         let regexResult
 
-        // Check for COMMONMARK pattern `:[NotFoundMessage|CircularMessage](file.md)`
+        // Logic for COMMONMARK pattern
         if (settings.commonmarkRegex === undefined ? DEFAULT_COMMONMARK_REGEX : settings.commonmarkRegex) {
             while ((regexResult = COMMONMARK_PATTERN.exec(parentContent))) {
                 parentContent = replace(
@@ -79,23 +80,17 @@ export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
                     parentContent,
                     parentFolder,
                     parentFile,
-                    regexResult[3].trim(),
-                    settings.notFoundMessage === undefined
-                        ? regexResult[1] === undefined
-                            ? DEFAULT_NOT_FOUND_MESSAGE
-                            : regexResult[1]
-                        : settings.notFoundMessage,
-                    settings.circularMessage === undefined
-                        ? regexResult[2] === undefined
-                            ? DEFAULT_CIRCULAR_MESSAGE
-                            : regexResult[2]
-                        : settings.circularMessage,
-                    processedFiles
+                    regexResult[3].trim(), // FileName
+                    settings.notFoundMessage || DEFAULT_NOT_FOUND_MESSAGE,
+                    settings.circularMessage || DEFAULT_CIRCULAR_MESSAGE,
+                    processedFiles,
+                    regexResult[4], // Start Line (Capture Group 4)
+                    regexResult[5]  // End Line (Capture Group 5)
                 )
             }
         }
 
-        // Check for MARKDOWN-IT-INCLUDE pattern `!!!include(file.md)!!!`
+        // Logic for MARKDOWN-IT pattern
         if (settings.markdownItRegex === undefined ? DEFAULT_MARKDOWN_IT_REGEX : settings.markdownItRegex) {
             while ((regexResult = MARKDOWN_IT_PATTERN.exec(parentContent))) {
                 parentContent = replace(
@@ -103,36 +98,25 @@ export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
                     parentContent,
                     parentFolder,
                     parentFile,
-                    regexResult[1].trim(),
-                    (settings.notFoundMessage === undefined ? DEFAULT_NOT_FOUND_MESSAGE : settings.notFoundMessage),
-                    (settings.circularMessage === undefined ? DEFAULT_CIRCULAR_MESSAGE : settings.circularMessage),
-                    processedFiles
+                    regexResult[1].trim(), // FileName
+                    settings.notFoundMessage || DEFAULT_NOT_FOUND_MESSAGE,
+                    settings.circularMessage || DEFAULT_CIRCULAR_MESSAGE,
+                    processedFiles,
+                    regexResult[2], // Start Line (Capture Group 2)
+                    regexResult[3]  // End Line (Capture Group 3)
                 )
             }
         }
 
-        // Return include (transclusion) result
         return parentContent
     }
 
-    /** Trigger the execution of include (trigger the transclusion) */
     const trigger: MarkdownIt.Rule<StateCore> = (state: StateCore) => {
-
-        // Check for an active text editor
-        if (vscode.window.activeTextEditor === undefined) {
-            return
-        }
-
-        // Check if there is a file open in the active text editor
+        if (vscode.window.activeTextEditor === undefined) return
         const file: string = vscode.window.activeTextEditor.document.fileName
-        if (file === undefined) {
-            return
-        }
-
-        // Execute transclusion
+        if (file === undefined) return
         state.src = execute(state.src, file)
     }
 
-    // Add plugin to markdown-it parser instance
     markdown.core.ruler.before('normalize', 'include', trigger)
 }
