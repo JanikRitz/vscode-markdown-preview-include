@@ -22,18 +22,20 @@ The following 2 syntaxes are supported and can be used at anytime
 
 **Content**
 
-- [**Examples**](#examples)
-  - [Example for syntax based on proposal for CommonMark.org](#example-for-syntax-based-on-proposal-for-commonmarkorg)
-  - [Example for syntax from Markdown-It-Include plugin](#example-for-syntax-from-markdown-it-include-plugin)
-- [**Options**](#options)
-  - [Provide alternative text when file cannot be found](#provide-alternative-text-when-file-cannot-be-found)
-  - [Provide alternative text for circular reference](#provide-alternative-text-for-circular-reference)
-  - [Omit output if file cannot be found or if there is a circular reference](#omit-output-if-file-cannot-be-found-or-if-there-is-a-circular-reference)
-- [**Use Cases**](#use-cases)
-  - [Include copyright on multiple markdown files](#include-copyright-on-multiple-markdown-files)
-  - [Include file containing important links and reference them](#include-file-containing-important-links-and-reference-them)
-  - [Multiple editors working on a large document](#multiple-editors-working-on-a-large-document)
-- [**Credits**](#credits)
+- [Support transclusion of files within Markdown Preview](#support-transclusion-of-files-within-markdown-preview)
+  - [**Examples**](#examples)
+    - [Example for syntax based on proposal for CommonMark.org](#example-for-syntax-based-on-proposal-for-commonmarkorg)
+    - [Example for syntax from Markdown-It-Include plugin](#example-for-syntax-from-markdown-it-include-plugin)
+  - [**Options**](#options)
+    - [Provide alternative text when file cannot be found](#provide-alternative-text-when-file-cannot-be-found)
+    - [Provide alternative text for circular reference](#provide-alternative-text-for-circular-reference)
+    - [Omit output if file cannot be found or if there is a circular reference](#omit-output-if-file-cannot-be-found-or-if-there-is-a-circular-reference)
+    - [Quote formatting for included content](#quote-formatting-for-included-content)
+  - [**Use Cases**](#use-cases)
+    - [Include copyright on multiple markdown files](#include-copyright-on-multiple-markdown-files)
+    - [Include file containing important links and reference them](#include-file-containing-important-links-and-reference-them)
+    - [Multiple editors working on a large document](#multiple-editors-working-on-a-large-document)
+  - [**Credits**](#credits)
 
 ---
 
@@ -78,6 +80,26 @@ The following 2 syntaxes are supported and can be used at anytime
 > **`:[](file.md)`**
 
 ![`:(file.md)`](examples/syntaxOmitOutput.png)
+
+### Quote formatting for included content
+
+> **`!!! include(file.md){quote} !!!`**
+>
+> **`:[Description](file.md){quote}`**
+
+* Wraps included content in a Markdown blockquote, with proper indentation
+* Appends a source line by default (e.g., `Source: file.md`); can be turned off globally via settings
+* Per-include override:
+  * Force quote: append `{quote}`
+  * Force plain: append `{noquote}` (useful when quote formatting is enabled globally)
+
+Examples
+
+```markdown
+!!! include(docs/meeting notes.md){quote} !!!
+:(chapters/ch1.md#L2-5){quote}
+!!! include(snippets.md #L5.2-7.4){noquote} !!!
+```
 
 ---
 

@@ -9,10 +9,13 @@ const DEFAULT_COMMONMARK_REGEX: boolean = true
 const DEFAULT_MARKDOWN_IT_REGEX: boolean = true
 const DEFAULT_NOT_FOUND_MESSAGE: string = 'File \'{{FILE}}\' not found'
 const DEFAULT_CIRCULAR_MESSAGE: string = 'Circular reference between \'{{FILE}}\' and \'{{PARENT}}\''
+const DEFAULT_QUOTE_FORMATTING: boolean = false
+const DEFAULT_QUOTE_INCLUDE_SOURCE: boolean = true
+const DEFAULT_QUOTE_SOURCE_LABEL: string = 'Source'
 
-// --- CHANGED: Regex patterns now allow for optional #L... suffix with word offsets ---
-const COMMONMARK_PATTERN: RegExp = /\:(?:\[([^|\]]*)\|?([^\]]*)\])?\(([^)#]+)(?:#L(\d+(?:\.\d+)?)(?:-(\d+(?:\.\d+)?))?)?\)/i
-const MARKDOWN_IT_PATTERN: RegExp = /\!{3}\s*include\s*\(\s*(.+?)(?:\s*#L(\d+(?:\.\d+)?)(?:-(\d+(?:\.\d+)?))?)?\s*\)\s*\!{3}/i
+// --- CHANGED: Regex patterns now allow for optional #L... suffix with word offsets and {quote|noquote} overrides ---
+const COMMONMARK_PATTERN: RegExp = /\:(?:\[([^|\]]*)\|?([^\]]*)\])?\(([^)#]+)(?:#L(\d+(?:\.\d+)?)(?:-(\d+(?:\.\d+)?))?)?\)\s*(?:\{\s*(noquote|quote)\s*\})?/i
+const MARKDOWN_IT_PATTERN: RegExp = /\!{3}\s*include\s*\(\s*(.+?)(?:\s*#L(\d+(?:\.\d+)?)(?:-(\d+(?:\.\d+)?))?)?\s*\)\s*(?:\{\s*(noquote|quote)\s*\})?\s*\!{3}/i
 
 export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
 
@@ -74,6 +77,22 @@ export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
         return selectedLines.join('\n');
     }
 
+    /** Formats included content as a block quote and optionally appends a source line */
+    function formatQuote(content: string, sourcePath: string, sourceLabel: string, includeSource: boolean): string {
+        const quoted = content
+            .split(/\r?\n/)
+            .map(line => line.trim().length === 0 ? '>' : `> ${line}`)
+            .join('\n')
+
+        if (!includeSource) return quoted
+
+        const workspace = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0]
+        const relative = workspace ? path.relative(workspace.uri.fsPath, sourcePath) : sourcePath
+        const sourceText = `<i>${sourceLabel}: \`${relative}\`</i>`
+
+        return `${quoted}\n> \n>> ${sourceText}`
+    }
+
     function replace(
         regexResult: RegExpExecArray,
         parentContent: string,
@@ -83,8 +102,9 @@ export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
         notFoundMessage: string,
         circulareMessage: string,
         processedFiles: String[],
-        startLine?: string, // NEW
-        endLine?: string    // NEW
+        startLine?: string,
+        endLine?: string,
+        quoteOverride?: string
     ): string {
 
         const childFile: string = path.resolve(parentFolder, childName)
@@ -97,10 +117,18 @@ export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
         } else {
             childContent = fs.readFileSync(childFile, 'utf8')
             
-            // --- CHANGED: Apply the line slicing before processing nested includes ---
             childContent = sliceLines(childContent, startLine, endLine);
             
             childContent = execute(childContent, childFile, processedFiles);
+        }
+
+        const globalQuote = settings.quoteFormatting === undefined ? DEFAULT_QUOTE_FORMATTING : settings.quoteFormatting
+        const includeSource = settings.quoteIncludeSource === undefined ? DEFAULT_QUOTE_INCLUDE_SOURCE : settings.quoteIncludeSource
+        const sourceLabel = settings.quoteSourceLabel || DEFAULT_QUOTE_SOURCE_LABEL
+        const shouldQuote = quoteOverride ? quoteOverride.toLowerCase() === 'quote' : globalQuote
+
+        if (shouldQuote) {
+            childContent = formatQuote(childContent, childFile, sourceLabel, includeSource)
         }
 
         return parentContent.slice(0, regexResult.index)
@@ -128,7 +156,8 @@ export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
                     settings.circularMessage || DEFAULT_CIRCULAR_MESSAGE,
                     processedFiles,
                     regexResult[4], // Start Line (Capture Group 4)
-                    regexResult[5]  // End Line (Capture Group 5)
+                    regexResult[5], // End Line (Capture Group 5)
+                    regexResult[6]  // Quote override (Capture Group 6)
                 )
             }
         }
@@ -146,7 +175,8 @@ export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
                     settings.circularMessage || DEFAULT_CIRCULAR_MESSAGE,
                     processedFiles,
                     regexResult[2], // Start Line (Capture Group 2)
-                    regexResult[3]  // End Line (Capture Group 3)
+                    regexResult[3], // End Line (Capture Group 3)
+                    regexResult[4]  // Quote override (Capture Group 4)
                 )
             }
         }

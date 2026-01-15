@@ -4,4 +4,7 @@ export default interface IncludeSettings {
     customPattern?: RegExp
     notFoundMessage?: string
     circularMessage?: string
+    quoteFormatting?: boolean
+    quoteIncludeSource?: boolean
+    quoteSourceLabel?: string
 }
