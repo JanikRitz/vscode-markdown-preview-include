@@ -10,25 +10,68 @@ const DEFAULT_MARKDOWN_IT_REGEX: boolean = true
 const DEFAULT_NOT_FOUND_MESSAGE: string = 'File \'{{FILE}}\' not found'
 const DEFAULT_CIRCULAR_MESSAGE: string = 'Circular reference between \'{{FILE}}\' and \'{{PARENT}}\''
 
-// --- CHANGED: Regex patterns now allow for an optional #L... suffix ---
-const COMMONMARK_PATTERN: RegExp = /\:(?:\[([^|\]]*)\|?([^\]]*)\])?\(([^)#]+)(?:#L(\d+)(?:-(\d+))?)?\)/i
-const MARKDOWN_IT_PATTERN: RegExp = /\!{3}\s*include\s*\(\s*(.+?)(?:\s*#L(\d+)(?:-(\d+))?)?\s*\)\s*\!{3}/i
+// --- CHANGED: Regex patterns now allow for optional #L... suffix with word offsets ---
+const COMMONMARK_PATTERN: RegExp = /\:(?:\[([^|\]]*)\|?([^\]]*)\])?\(([^)#]+)(?:#L(\d+(?:\.\d+)?)(?:-(\d+(?:\.\d+)?))?)?\)/i
+const MARKDOWN_IT_PATTERN: RegExp = /\!{3}\s*include\s*\(\s*(.+?)(?:\s*#L(\d+(?:\.\d+)?)(?:-(\d+(?:\.\d+)?))?)?\s*\)\s*\!{3}/i
 
 export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
 
     if (settings === undefined) { settings = { } }
 
-    /** Helper to extract specific lines from a string */
-    function sliceLines(content: string, startLine?: string, endLine?: string): string {
-        if (!startLine) return content;
+    /** Helper to extract specific lines and words from a string 
+     * Supports formats like:
+     * - "5" -> line 5
+     * - "5.0" -> line 5, from start
+     * - "5.2" -> line 5, starting from word 2
+     */
+    function sliceLines(content: string, startSpec?: string, endSpec?: string): string {
+        if (!startSpec) return content;
         
         const lines = content.split(/\r?\n/);
-        const start = parseInt(startLine) - 1; // 1-indexed to 0-indexed
-        // If no endLine provided, just take the one single line. 
-        // If endLine is provided, take the range.
-        const end = endLine ? parseInt(endLine) : start + 1;
         
-        return lines.slice(start, end).join('\n');
+        // Parse start specification
+        const startParts = startSpec.split('.');
+        const startLine = parseInt(startParts[0]) - 1; // 1-indexed to 0-indexed
+        const startWord = startParts.length > 1 ? parseInt(startParts[1]) : 0;
+        
+        // Parse end specification
+        let endLine: number;
+        let endWord: number | undefined;
+        
+        if (endSpec) {
+            const endParts = endSpec.split('.');
+            endLine = parseInt(endParts[0]);
+            endWord = endParts.length > 1 ? parseInt(endParts[1]) : undefined;
+        } else {
+            endLine = startLine + 1;
+            endWord = undefined;
+        }
+        
+        // Extract the line range
+        const selectedLines = lines.slice(startLine, endLine);
+        
+        if (selectedLines.length === 0) return '';
+        
+        // Apply word-level slicing if needed
+        if (startWord > 0 || endWord !== undefined) {
+            // Handle single line with word offsets
+            if (selectedLines.length === 1) {
+                const words = selectedLines[0].split(/\s+/);
+                const wordEnd = endWord !== undefined ? endWord : words.length;
+                return words.slice(startWord, wordEnd).join(' ');
+            } else {
+                // Multi-line: apply startWord to first line, endWord to last line
+                const words = selectedLines[0].split(/\s+/);
+                selectedLines[0] = words.slice(startWord).join(' ');
+                
+                if (endWord !== undefined && selectedLines.length > 1) {
+                    const lastWords = selectedLines[selectedLines.length - 1].split(/\s+/);
+                    selectedLines[selectedLines.length - 1] = lastWords.slice(0, endWord).join(' ');
+                }
+            }
+        }
+        
+        return selectedLines.join('\n');
     }
 
     function replace(
