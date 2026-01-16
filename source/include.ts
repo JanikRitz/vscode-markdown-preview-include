@@ -86,11 +86,10 @@ export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
 
         if (!includeSource) return quoted
 
-        const workspace = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0]
-        const relative = workspace ? path.relative(workspace.uri.fsPath, sourcePath) : sourcePath
-        const sourceText = `<i>${sourceLabel}: \`${relative}\`</i>`
+        const filename = path.basename(sourcePath)
+        const sourceText = `*${sourceLabel}: <a href="${sourcePath}">${filename}</a>*`
 
-        return `${quoted}\n> \n>> ${sourceText}`
+        return `${quoted}\n> \n> ${sourceText}`
     }
 
     function replace(
