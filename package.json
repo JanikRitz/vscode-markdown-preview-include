@@ -2,7 +2,7 @@
   "name": "vscode-markdown-preview-include",
   "displayName": "Markdown Preview Include Files (Extended)",
   "description": "Support transclusion of files within Markdown Preview, and allow for single or multi line excerpts",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "engines": {
     "vscode": "^1.35.0"
   },

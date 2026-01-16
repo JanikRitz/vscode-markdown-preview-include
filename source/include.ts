@@ -78,7 +78,7 @@ export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
     }
 
     /** Formats included content as a block quote and optionally appends a source line */
-    function formatQuote(content: string, sourcePath: string, sourceLabel: string, includeSource: boolean): string {
+    function formatQuote(content: string, sourcePath: string, sourceLabel: string, includeSource: boolean, startLine?: string, originalContent?: string): string {
         const quoted = content
             .split(/\r?\n/)
             .map(line => line.trim().length === 0 ? '>' : `> ${line}`)
@@ -87,7 +87,43 @@ export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
         if (!includeSource) return quoted
 
         const filename = path.basename(sourcePath)
-        const sourceText = `*${sourceLabel}: <a href="${sourcePath}">${filename}</a>*`
+        // Use VS Code's file URI scheme for proper link handling
+        const normalizedPath = sourcePath.replace(/\\/g, '/')
+        
+        // Calculate character-based column position
+        let lineNumber = '1'
+        let columnNumber = '1'
+        
+        if (startLine) {
+            const startParts = startLine.split('.')
+            lineNumber = startParts[0]
+            
+            // If word offset is specified, calculate character position
+            if (startParts.length > 1 && originalContent) {
+                const wordOffset = parseInt(startParts[1])
+                const lineIndex = parseInt(lineNumber) - 1
+                const lines = originalContent.split(/\r?\n/)
+                
+                if (lineIndex >= 0 && lineIndex < lines.length) {
+                    const line = lines[lineIndex]
+                    const words = line.split(/\s+/)
+                    
+                    // Calculate character position by finding where the word starts
+                    let charPos = 1 // VS Code uses 1-based indexing
+                    for (let i = 0; i < wordOffset && i < words.length; i++) {
+                        charPos += words[i].length
+                        // Add 1 for the space after each word (except we're looking for start of next word)
+                        if (i < wordOffset - 1 || words[i].length > 0) {
+                            charPos += 1 // space character
+                        }
+                    }
+                    columnNumber = charPos.toString()
+                }
+            }
+        }
+        
+        const vsCodeUri = `vscode://file/${normalizedPath}:${lineNumber}:${columnNumber}`
+        const sourceText = `*${sourceLabel}: [${filename}](<${vsCodeUri}>)*`
 
         return `${quoted}\n> \n> ${sourceText}`
     }
@@ -114,20 +150,21 @@ export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
         } else if (processedFiles.indexOf(childFile) !== -1) {
             childContent = circulareMessage.replace('{{FILE}}', childFile).replace('{{PARENT}}', parentFile as string)
         } else {
-            childContent = fs.readFileSync(childFile, 'utf8')
+            const originalContent = fs.readFileSync(childFile, 'utf8')
+            childContent = originalContent
             
             childContent = sliceLines(childContent, startLine, endLine);
             
             childContent = execute(childContent, childFile, processedFiles);
-        }
+            
+            const globalQuote = settings.quoteFormatting === undefined ? DEFAULT_QUOTE_FORMATTING : settings.quoteFormatting
+            const includeSource = settings.quoteIncludeSource === undefined ? DEFAULT_QUOTE_INCLUDE_SOURCE : settings.quoteIncludeSource
+            const sourceLabel = settings.quoteSourceLabel || DEFAULT_QUOTE_SOURCE_LABEL
+            const shouldQuote = quoteOverride ? quoteOverride.toLowerCase() === 'quote' : globalQuote
 
-        const globalQuote = settings.quoteFormatting === undefined ? DEFAULT_QUOTE_FORMATTING : settings.quoteFormatting
-        const includeSource = settings.quoteIncludeSource === undefined ? DEFAULT_QUOTE_INCLUDE_SOURCE : settings.quoteIncludeSource
-        const sourceLabel = settings.quoteSourceLabel || DEFAULT_QUOTE_SOURCE_LABEL
-        const shouldQuote = quoteOverride ? quoteOverride.toLowerCase() === 'quote' : globalQuote
-
-        if (shouldQuote) {
-            childContent = formatQuote(childContent, childFile, sourceLabel, includeSource)
+            if (shouldQuote) {
+                childContent = formatQuote(childContent, childFile, sourceLabel, includeSource, startLine, originalContent)
+            }
         }
 
         return parentContent.slice(0, regexResult.index)
