@@ -12,6 +12,7 @@ const DEFAULT_CIRCULAR_MESSAGE: string = 'Circular reference between \'{{FILE}}\
 const DEFAULT_QUOTE_FORMATTING: boolean = false
 const DEFAULT_QUOTE_INCLUDE_SOURCE: boolean = true
 const DEFAULT_QUOTE_SOURCE_LABEL: string = 'Source'
+const DEFAULT_OMISSION_INDICATOR: boolean = true
 
 // --- CHANGED: Regex patterns now allow for optional #L... suffix with word offsets and {quote|noquote} overrides ---
 const COMMONMARK_PATTERN: RegExp = /\:(?:\[([^|\]]*)\|?([^\]]*)\])?\(([^)#]+)(?:#L(\d+(?:\.\d+)?)(?:-(\d+(?:\.\d+)?))?)?\)\s*(?:\{\s*(noquote|quote)\s*\})?/i
@@ -31,6 +32,7 @@ export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
         if (!startSpec) return content;
         
         const lines = content.split(/\r?\n/);
+        const useOmissionIndicator = settings.omissionIndicator === undefined ? DEFAULT_OMISSION_INDICATOR : settings.omissionIndicator;
         
         // Parse start specification
         const startParts = startSpec.split('.');
@@ -61,15 +63,37 @@ export = function Include(markdown: MarkdownIt, settings: IncludeSettings) {
             if (selectedLines.length === 1) {
                 const words = selectedLines[0].split(/\s+/);
                 const wordEnd = endWord !== undefined ? endWord : words.length;
-                return words.slice(startWord, wordEnd).join(' ');
+                let result = words.slice(startWord, wordEnd).join(' ');
+                
+                // Add omission indicators
+                if (useOmissionIndicator) {
+                    if (startWord > 0) {
+                        result = '[...] ' + result;
+                    }
+                    if (endWord !== undefined && endWord < words.length) {
+                        result = result + ' [...]';
+                    }
+                }
+                
+                return result;
             } else {
                 // Multi-line: apply startWord to first line, endWord to last line
                 const words = selectedLines[0].split(/\s+/);
                 selectedLines[0] = words.slice(startWord).join(' ');
                 
+                // Add [...] at start of first line if starting mid-line
+                if (useOmissionIndicator && startWord > 0) {
+                    selectedLines[0] = '[...] ' + selectedLines[0];
+                }
+                
                 if (endWord !== undefined && selectedLines.length > 1) {
                     const lastWords = selectedLines[selectedLines.length - 1].split(/\s+/);
                     selectedLines[selectedLines.length - 1] = lastWords.slice(0, endWord).join(' ');
+                    
+                    // Add [...] at end of last line if ending mid-line
+                    if (useOmissionIndicator && endWord < lastWords.length) {
+                        selectedLines[selectedLines.length - 1] = selectedLines[selectedLines.length - 1] + ' [...]';
+                    }
                 }
             }
         }

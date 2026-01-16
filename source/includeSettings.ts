@@ -7,4 +7,5 @@ export default interface IncludeSettings {
     quoteFormatting?: boolean
     quoteIncludeSource?: boolean
     quoteSourceLabel?: string
+    omissionIndicator?: boolean
 }
